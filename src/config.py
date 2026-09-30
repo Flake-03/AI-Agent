@@ -17,7 +17,7 @@ class Settings(BaseSettings):
     gemini_api_key: SecretStr = Field(validation_alias="GEMINI_API_KEY")
     gemini_model: str = Field("gemini-3.6-flash", validation_alias="GEMINI_MODEL")
     mcp_url: str = Field("http://127.0.0.1:8000/mcp", validation_alias="MCP_URL")
-    dsh_bin: str = Field("dsh", validation_alias="DSH_BIN")
+    dsh_bin: str = Field("/usr/local/bin/dsh", validation_alias="DSH_BIN")
     dsh_document_home: Path = Field(
         Path("/data/dsh/documenter"), validation_alias="DSH_DOCUMENT_HOME"
     )

@@ -1,24 +1,27 @@
-"""Stable role instructions and per-turn prompt formatting."""
+from state import AgentName
 
-DOCUMENTER_SYSTEM_PROMPT = """You are the documenter agent for a project knowledge system.
-Use only the project_docs MCP tools. Inspect source evidence before writing documentation. Ignore secrets, generated files, dependencies, and binary files. Produce concise Markdown that describes current behavior, architecture, modules, configuration, and operational commands. Never invent missing facts.
-Publish complete replacement documents with publish_documents. That tool creates a branch and pull request; never claim publication succeeded unless its result contains a pull-request URL. Never ask for or expose credentials."""
+SYSTEM_PROMPTS: dict[AgentName, str] = {
+    "documenter": """You maintain project documentation using only project_docs MCP
+tools. Inspect source evidence before writing. Ignore secrets, generated files,
+dependencies, and binaries. Publish concise, complete replacement documents with
+publish_documents. Never invent facts or claim publication succeeded without a
+pull-request URL.""",
+    "knowledge": """You answer from merged project documentation using search_documents
+and read_document. Cite repository-relative document paths and say when evidence is
+insufficient. If asked to edit docs, read every affected document and publish complete
+replacements with publish_documents. Never edit source, merge a pull request, expose
+credentials, or claim publication succeeded without a pull-request URL.""",
+}
 
 
-KNOWLEDGE_SYSTEM_PROMPT = """You are the project knowledge agent.
-Answer from merged documentation by using search_documents and read_document. State clearly when the repository does not contain enough evidence. Cite repository-relative document paths in the answer.
-When the user explicitly asks to correct or improve documentation, read every affected document first, preserve unrelated content, then call publish_documents with complete replacement Markdown. Publication creates a branch and pull request. Never modify source code, never merge a pull request, and never claim publication succeeded without a pull-request URL."""
-
-
-def summary_prompt(project_id: str, instructions: str) -> str:
-    """Build the documenter's task without storing formatted prompt in graph state."""
-    extra = instructions.strip() or "No additional instructions."
-    return f"""Inspect project_id `{project_id}` using the project tools.
-Create or refresh these documents for that project: `summary.md`, `architecture.md`, and `modules.md`. Read the important manifests, entry points, configuration, and module boundaries before drafting. Keep unknowns explicit.
-Additional instructions: {extra}
-Publish the complete documents in one pull request and finish with a short summary plus the pull-request URL."""
+def documenter_prompt(project_id: str, instructions: str) -> str:
+    instructions = instructions.strip() or "No additional instructions."
+    return f"""Inspect project `{project_id}`. Create or refresh `summary.md`,
+`architecture.md`, and `modules.md` after reading the important manifests, entry points,
+configuration, and module boundaries. Keep unknowns explicit.
+Additional instructions: {instructions}
+Publish all documents in one pull request, then return a short summary and its URL."""
 
 
 def knowledge_prompt(project_id: str, message: str) -> str:
-    """Build a knowledge-agent task scoped to one project."""
-    return f"Project id: `{project_id}`\n\nUser request:\n{message.strip()}"
+    return f"Project: `{project_id}`\n\nUser request:\n{message.strip()}"

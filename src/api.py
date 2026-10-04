@@ -1,92 +1,105 @@
-"""FastAPI routes for Swagger-driven orchestration."""
-
+import asyncio
 import logging
-from typing import Literal
+from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, HTTPException, Request
+from pydantic import BaseModel, ConfigDict, Field
 
-from models import AgentResponse, ChatRequest, SummaryRequest
-from runtime import lifespan
+from agents import DshAgent
+from config import Settings
+from graph import build_graph
+from prompts import SYSTEM_PROMPTS
+from state import Action, AgentName
 
 logger = logging.getLogger(__name__)
+PROJECT_ID_PATTERN = r"^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$"
 
 
-def create_app() -> FastAPI:
-    """Create the HTTP application with one owned runtime lifespan."""
-    application = FastAPI(
-        title="Project Agent Orchestrator",
-        summary="Two DeepSeek Harness agents coordinated by LangGraph.",
-        version="0.1.0",
-        lifespan=lifespan,
-    )
+class AgentRequest(BaseModel):
+    model_config = ConfigDict(str_strip_whitespace=True)
 
-    @application.get("/health", tags=["operations"])
-    async def health() -> dict[str, str]:
-        return {"status": "ok"}
+    project_id: str = Field(pattern=PROJECT_ID_PATTERN)
+    thread_id: str = Field(min_length=1, max_length=128)
 
-    @application.get("/ready", tags=["operations"])
-    async def ready(request: Request) -> dict[str, str]:
-        agents = getattr(request.app.state, "agents", None)
-        if agents is None or not agents.ready:
-            raise HTTPException(status_code=503, detail="agent runtimes are not ready")
-        return {"status": "ready"}
 
-    @application.post("/v1/summaries", response_model=AgentResponse, tags=["agents"])
-    async def summarize(payload: SummaryRequest, request: Request) -> AgentResponse:
-        return await invoke(
-            request,
-            action="summarize",
-            project_id=payload.project_id,
-            thread_id=payload.thread_id,
-            message=payload.instructions,
+class SummaryRequest(AgentRequest):
+    instructions: str = Field(default="", max_length=4_000)
+
+
+class ChatRequest(AgentRequest):
+    message: str = Field(min_length=1, max_length=20_000)
+
+
+class AgentResponse(BaseModel):
+    thread_id: str
+    agent_session_id: str
+    answer: str
+    finish_reason: str | None = None
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    settings = Settings()
+    agents: dict[AgentName, DshAgent] = {
+        name: DshAgent(name, prompt, settings)
+        for name, prompt in SYSTEM_PROMPTS.items()
+    }
+    try:
+        async with asyncio.TaskGroup() as tasks:
+            for agent in agents.values():
+                tasks.create_task(agent.start())
+        app.state.graph = build_graph(agents)
+        yield
+    finally:
+        await asyncio.gather(
+            *(agent.close() for agent in agents.values()), return_exceptions=True
         )
 
-    @application.post("/v1/chat", response_model=AgentResponse, tags=["agents"])
-    async def chat(payload: ChatRequest, request: Request) -> AgentResponse:
-        return await invoke(
-            request,
-            action="chat",
-            project_id=payload.project_id,
-            thread_id=payload.thread_id,
-            message=payload.message,
-        )
 
-    return application
+app = FastAPI(
+    title="Project Agent Orchestrator",
+    summary="Project documentation agents routed by LangGraph.",
+    version="0.1.0",
+    lifespan=lifespan,
+)
+
+
+@app.get("/health", tags=["operations"])
+async def health() -> dict[str, str]:
+    return {"status": "ok"}
+
+
+@app.post("/v1/summaries", response_model=AgentResponse, tags=["agents"])
+async def summarize(payload: SummaryRequest, request: Request) -> AgentResponse:
+    return await invoke(request, "summarize", payload, payload.instructions)
+
+
+@app.post("/v1/chat", response_model=AgentResponse, tags=["agents"])
+async def chat(payload: ChatRequest, request: Request) -> AgentResponse:
+    return await invoke(request, "chat", payload, payload.message)
 
 
 async def invoke(
     request: Request,
-    *,
-    action: Literal["summarize", "chat"],
-    project_id: str,
-    thread_id: str,
+    action: Action,
+    payload: AgentRequest,
     message: str,
 ) -> AgentResponse:
-    """Invoke one graph run and normalize its completed state."""
-    graph = getattr(request.app.state, "graph", None)
-    if graph is None:
-        raise HTTPException(status_code=503, detail="orchestrator is not ready")
     try:
-        result = await graph.ainvoke(
+        result = await request.app.state.graph.ainvoke(
             {
                 "action": action,
-                "project_id": project_id,
-                "thread_id": thread_id,
+                "project_id": payload.project_id,
+                "thread_id": payload.thread_id,
                 "message": message,
-            },
-            {"configurable": {"thread_id": f"{action}:{project_id}:{thread_id}"}},
+            }
         )
-    except ValueError as error:
-        raise HTTPException(status_code=422, detail=str(error)) from error
     except Exception as error:
         logger.exception("agent runtime failed")
         raise HTTPException(status_code=502, detail="agent runtime failed") from error
     return AgentResponse(
-        thread_id=thread_id,
+        thread_id=payload.thread_id,
         agent_session_id=result["agent_session_id"],
         answer=result["answer"],
         finish_reason=result.get("finish_reason"),
     )
-
-
-app = create_app()

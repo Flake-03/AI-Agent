@@ -1,8 +1,6 @@
 [tool.poetry]
 name = "project-agent-orchestrator"
 version = "0.1.0"
-description = ""
-authors = []
 package-mode = false
 
 [tool.poetry.dependencies]

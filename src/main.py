@@ -1,17 +1,10 @@
 import uvicorn
 
 from api import app
-from config import Settings
 
 
 def main() -> None:
-    settings = Settings()
-    uvicorn.run(
-        app,
-        host=settings.host,
-        port=settings.port,
-        log_level=settings.log_level.lower(),
-    )
+    uvicorn.run(app, host="0.0.0.0", port=8080)
 
 
 if __name__ == "__main__":

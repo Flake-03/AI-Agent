@@ -17,8 +17,6 @@ FROM python:3.12-slim-bookworm
 ENV PYTHONUNBUFFERED=1 \
     POETRY_VIRTUALENVS_CREATE=false \
     POETRY_NO_INTERACTION=1 \
-    DSH_HOME=/data/dsh \
-    DSH_WORKSPACE=/app \
     PYTHONPATH=/app/src:/opt/deepseek-harness/python/sdk/src
 
 WORKDIR /app

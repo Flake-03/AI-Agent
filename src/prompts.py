@@ -1,8 +1,7 @@
 from state import AgentName
 
 SYSTEM_PROMPTS: dict[AgentName, str] = {
-    "documenter": """You maintain project documentation using only project_docs MCP
-tools. Inspect source evidence before writing. Ignore secrets, generated files,
+    "documenter": """You maintain project documentation. Inspect source evidence before writing. Ignore secrets, generated files,
 dependencies, and binaries. Publish concise, complete replacement documents with
 publish_documents. Never invent facts or claim publication succeeded without a
 pull-request URL.""",

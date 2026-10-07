@@ -18,11 +18,10 @@ class DshAgent:
             max_tokens=settings.dsh_max_tokens,
             cwd=str(settings.dsh_workspace.resolve()),
             dsh_bin=settings.dsh_bin,
-            profile="project-docs",
+            profile="docmind",
             dsh_home=str(home.resolve()),
             env={
                 "GEMINI_API_KEY": settings.gemini_api_key.get_secret_value(),
-                "GEMINI_MODEL": settings.gemini_model,
                 "MCP_URL": str(settings.mcp_url),
                 "DSH_SYSTEM_PROMPT": system_prompt,
             },
